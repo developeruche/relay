@@ -15,27 +15,43 @@ fn webhook_error(msg: &str) -> jsonrpsee::types::error::ErrorObject<'static> {
     )
 }
 
+pub fn generate_signature(data: &str, secret: &str) -> Result<String, &'static str> {
+    if data.is_empty() || secret.is_empty() {
+        return Err("Invalid data or secret");
+    }
+
+    type HmacSha256 = Hmac<Sha256>;
+
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(data.as_bytes());
+
+    let result = mac.finalize();
+    Ok(hex::encode(result.into_bytes()))
+}
+
 /// HMAC signature verification.
 pub fn verify_signature(body: &str, secret: &str, signature: &str) -> bool {
     if body.is_empty() || secret.is_empty() || signature.is_empty() {
         return false;
     }
 
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
+    let Ok(expected_signature) = generate_signature(body, secret) else {
+        return false;
+    };
 
-    type HmacSha256 = Hmac<Sha256>;
-
-    let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
-        Ok(mac) => mac,
+    let signature_bytes = match hex::decode(signature) {
+        Ok(bytes) => bytes,
         Err(_) => return false,
     };
 
-    mac.update(body.as_bytes());
-    let result = mac.finalize();
-    let hash = hex::encode(result.into_bytes());
+    let expected_signature_bytes =
+        hex::decode(expected_signature).expect("Failed to decode expected signature");
 
-    hash == signature
+    type HmacSha256 = Hmac<Sha256>;
+    let mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
+
+    mac.verify_slice(&signature_bytes, &expected_signature_bytes).is_ok()
 }
 
 /// Parameters for webhook requests.
