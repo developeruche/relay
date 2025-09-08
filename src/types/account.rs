@@ -455,8 +455,13 @@ impl<P: Provider> Account<P> {
     ///
     /// This gets the next nonce for sequence key `0`.
     pub async fn get_nonce(&self) -> TransportResult<U256> {
+        self.get_nonce_for_sequence_key(DEFAULT_SEQUENCE_KEY).await
+    }
+
+    /// Get the next nonce for the given EOA and sequence key.
+    pub async fn get_nonce_for_sequence_key(&self, sequence_key: U192) -> TransportResult<U256> {
         self.delegation
-            .getNonce(DEFAULT_SEQUENCE_KEY)
+            .getNonce(sequence_key)
             .call()
             .overrides(self.overrides.clone())
             .await
